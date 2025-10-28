@@ -1,0 +1,73 @@
+Providing Destination IPs for Internal or VPN-Based Integrations
+When an external partner or internal team requests “the destination IP for a given endpoint or application”, this guide explains how to identify, expose, and securely share the correct internal endpoint, 
+especially when your service is hosted in a Kubernetes cluster (e.g., EKS).
+
+1. Understanding the Context
+When teams establish SFTP or API connectivity over a VPN, they often ask for Destination IP
+This IP must be reachable over the private network or VPN, not over the public internet.
+
+2. Expose the Service Internally
+If the service currently uses a ClusterIP type and needs to be reachable via VPN, create an internal LoadBalancer service (you can still keep the existing ClusterIP for internal cluster use):
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-internal
+  namespace: app
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"  # internal ALB
+spec:
+  type: LoadBalancer
+  selector:
+    app: backend 
+  ports:
+    - port: 3000        
+      targetPort: 3000  (Same as Container port)
+
+This configuration creates a private load balancer (for example, an AWS Network Load Balancer) inside your VPC.
+
+It will output something like:
+
+Internal DNS: internal-backend-xxxx.elb.region.amazonaws.com
+Internal IP: 10.x.x.x
+Port: 3000
+
+3. Update Security Groups
+Allow inbound traffic only from trusted VPN or internal CIDRs.
+
+Example:
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxx \
+  --protocol tcp \
+  --port 3000 \
+  --cidr 10.x.x.x/16
+
+This rule allows traffic from the internal or VPN network to access your service through the private Load Balancer.
+
+Now — when someone from outside with within this cidr connects over VPN →
+Traffic passes through the VPN tunnel →
+Enters VPC (10.50.x.x range) →
+Security Group allows →
+Load Balancer → Pod.
+
+This ensures only the partner or internal network can reach your service.
+
+4. Information to Share
+When responding to a request like:
+
+“Please confirm the destination IP for this endpoint.”
+
+You should provide:
+Internal DNS: internal-app-xxxx.elb.private-region.amazonaws.com
+Private IP: 10.x.x.x
+Accessible via: VPN (10.x.x.x/16)
+Security Group: Configured to allow required internal CIDRs
+
+5. Key Concepts to Remember
+ClusterIP	Internal-only — not reachable externally
+Internal Load Balancer	Used for VPN or private interconnects
+Routing Tables	Must include both subnet ranges
+Security Groups	Act as virtual firewalls; only allow trusted sources
+DNS Resolution	Internal DNS resolves to private IPs, external DNS to public IPs
+
