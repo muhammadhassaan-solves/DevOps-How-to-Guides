@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infra
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sftp-pvc
+  namespace: infra
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+  storageClassName: storageclass-name
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sftp-server
+  namespace: infra
+  labels:
+    app: sftp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sftp-server
+  template:
+    metadata:
+      labels:
+        app: sftp-server
+    spec:
+      containers:
+        - name: sftp
+          image: atmoz/sftp
+          args:
+            - bankuser:SecurePassword!:1001:1001:upload
+          ports:
+            - containerPort: 22
+          volumeMounts:
+            - name: sftp-data
+              mountPath: /home/bankuser
+      volumes:
+        - name: sftp-data
+          persistentVolumeClaim:
+            claimName: sftp-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sftp-service
+  namespace: infra
+  labels:
+    app: sftp-server
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 22
+      targetPort: 22
+      protocol: TCP
+  selector:
+    app: sftp-server
