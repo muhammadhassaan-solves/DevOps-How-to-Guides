@@ -1,6 +1,10 @@
 ArgoCD Installation: 
 https://argo-cd.readthedocs.io/en/stable/getting_started/
 
+Initial admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d ; echo
+
+Changing Default Sync Time
 The default sync interval in ArgoCD controls how often ArgoCD automatically syncs your applications from Git. By default, this is 3 minutes (180 seconds).
 
 1. Edit ArgoCD ConfigMap
