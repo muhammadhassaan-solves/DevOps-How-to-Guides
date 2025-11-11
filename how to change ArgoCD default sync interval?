@@ -1,0 +1,18 @@
+The default sync interval in ArgoCD controls how often ArgoCD automatically syncs your applications from Git. By default, this is 3 minutes (180 seconds).
+
+1. Edit ArgoCD ConfigMap
+kubectl -n argocd edit configmap argocd-cm
+
+Add the following block at the end:
+data:
+  timeout.reconciliation: 10s #syncinterval
+
+2. Restart Application Controller
+kubectl -n argocd rollout restart statefulset argocd-application-controller
+
+3. Verify Setting
+kubectl -n argocd get configmap argocd-cm -o yaml | grep timeout.reconciliation
+You should see:
+timeout.reconciliation: 10s
+
+ArgoCD now checks your Git repositories every 10 seconds for changes.
