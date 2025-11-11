@@ -1,3 +1,6 @@
+ArgoCD Installation: 
+https://argo-cd.readthedocs.io/en/stable/getting_started/
+
 The default sync interval in ArgoCD controls how often ArgoCD automatically syncs your applications from Git. By default, this is 3 minutes (180 seconds).
 
 1. Edit ArgoCD ConfigMap
@@ -16,3 +19,4 @@ You should see:
 timeout.reconciliation: 10s
 
 ArgoCD now checks your Git repositories every 10 seconds for changes.
+
