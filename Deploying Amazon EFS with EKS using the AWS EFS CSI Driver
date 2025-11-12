@@ -132,3 +132,64 @@ aws efs create-mount-target \
   --subnet-id subnet-ccc \
   --security-groups <efssg-id> \
   --region <region-name>
+
+
+9. Create StorageClass, PVC, and Test Pod
+
+storageclass.yaml
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+
+
+pvc.yaml
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: efs-claim
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 5Gi
+
+
+pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-efs-test
+spec:
+  containers:
+  - name: app
+    image: amazonlinux
+    command: ["/bin/sh"]
+    args: ["-c", "while true; do echo $(date) >> /data/out.txt; sleep 5; done"]
+    volumeMounts:
+    - name: efs-storage
+      mountPath: /data
+  volumes:
+  - name: efs-storage
+    persistentVolumeClaim:
+      claimName: efs-claim
+
+
+Apply all:
+
+kubectl apply -f storageclass.yaml
+kubectl apply -f pvc.yaml
+kubectl apply -f pod.yaml
+
+
+Then confirm:
+
+kubectl get pods,pvc,pv
