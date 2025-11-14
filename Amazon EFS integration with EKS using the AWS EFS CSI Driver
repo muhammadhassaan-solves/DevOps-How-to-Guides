@@ -1,0 +1,171 @@
+1. Create EFS CSI IAM Policy
+
+This policy allows EKS to manage EFS mounts.
+
+cat > efs-csi-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:DescribeAccessPoints",
+        "elasticfilesystem:DescribeFileSystems",
+        "elasticfilesystem:DescribeMountTargets",
+        "ec2:DescribeAvailabilityZones"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:CreateAccessPoint"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "aws:RequestTag/efs.csi.aws.com/cluster": "true"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "aws:ResourceTag/efs.csi.aws.com/cluster": "true"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "elasticfilesystem:DeleteAccessPoint",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/efs.csi.aws.com/cluster": "true"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+cat > efs-csi-policy.json <<EOF  (optional)
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<account-id>:oidc-provider/oidc.eks.<region>.amazonaws.com/id/<oidc-id>"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.<region>.amazonaws.com/id/<oidc-id>:aud": "sts.amazonaws.com",
+          "oidc.eks.<region>.amazonaws.com/id/<oidc-id>:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+2. Create the policy
+aws iam create-policy \
+  --policy-name AmazonEKS_EFS_CSI_Driver \
+  --policy-document file://efs-csi-policy.json
+
+3. Create Service Account
+
+eksctl create iamserviceaccount \
+  --name efs-csi-controller-sa \
+  --namespace kube-system \
+  --cluster <cluster-name> \
+  --attach-policy-arn <arn> \
+  --approve \
+  --region <region>
+
+4. Install the EFS CSI Driver (Official AWS Image)
+
+Add the repo:
+
+helm repo add aws-efs-csi-driver https://kubernetes-sigs.github.io/aws-efs-csi-driver/
+helm repo update
+
+Install the driver (using the service account we created):
+
+helm upgrade -i aws-efs-csi-driver aws-efs-csi-driver/aws-efs-csi-driver \
+  --namespace kube-system \
+  --set controller.serviceAccount.create=false \
+  --set controller.serviceAccount.name=efs-csi-controller-sa
+
+Check status:
+
+kubectl get pods -n kube-system | grep efs
+
+
+5. Create a Security Group for EFS
+aws ec2 create-security-group \
+  --group-name efs-sg \
+  --description "EFS access for EKS nodes" \
+  --vpc-id <vpc-id> \  #same eks vpc
+  --region <region>
+
+
+6. Get the SG used by worker nodes
+aws ec2 describe-instances \
+  --instance-ids <instance-id> <instance-id> <instance-id> \
+  --query "Reservations[*].Instances[*].SecurityGroups[*].GroupId" \
+  --output text
+
+7. Allow inbound NFS (TCP 2049) from your EKS node group SG:
+
+aws ec2 authorize-security-group-ingress \
+  --group-id <efs-sg-id> \
+  --protocol tcp \
+  --port 2049 \
+  --source-group <EKS_NODE_SG_ID> \  #workernodes-sg
+  --region <region>
+
+8. Create EFS from management console with customization like selecting efs-sg
+
+9. StorageClass PV, PVC 
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: <pv-name>
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  persistentVolumeReclaimPolicy: Retain
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: <efs-id>
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: <pvc-name>
+  namespace: <app-namespace>
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 10Gi
