@@ -1,4 +1,24 @@
-Request Size Limitation: Large API Payloads Failing
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+10. The client requirement was that they need to inspect east-west traffic inspection inside private subnets where worker nodes are deployed.
+Date: 13/10/2025
+
+Solution:
+While launching EKS, I didn't use nat for private subnets. Instead we add TGW in the route tables of private subnets related to worker nodes and it helped the security team to inspect the traffic from worker nodes.
+
+----------------------------------------------------------------------------------------------------------------------------------------
+9. EFS related deployment was not getting successful.
+Date: 12/10/2025
+
+Solution:
+After hours of troubleshooting, I found the sg related to nfs need to allow all EC2 instances in the EKS worker node security group to connect via TCP port 2049 to the EFS security group.
+
+Key Learning:
+If things related to efs don't work check for logs of efs csi.
+for cheking issues, related to networking use aws system manager to the worker nodes and try nslookup with efs dns then use nc to check connectivity. 
+
+----------------------------------------------------------------------------------------------------------------------------------------
+8. Request Size Limitation: Large API Payloads Failing
 Date: 22/09/2025
 
 Problem:
@@ -21,7 +41,7 @@ nginx -t
 systemctl reload nginx
 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
-Github Actions CI/CD Automation: RAG WebUI App Deployment
+7. Github Actions CI/CD Automation: RAG WebUI App Deployment
 Date: 24/09/2025
 
 Problem:
@@ -41,7 +61,7 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 RUN npm run pyodide:fetch && npm run build
 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CORS Header Configuration Fix
+6. CORS Header Configuration Fix
 Date: 1/10/2025
 
 Problem:
@@ -66,7 +86,7 @@ Compare it with the allowed origins in .env.
 
 If missing, update the environment configuration.
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-Deployment Issue: Updated Code Not Reflecting on Website
+5. Deployment Issue: Updated Code Not Reflecting on Website
 Date: 22/10/2025
 
 Problem:
@@ -81,7 +101,7 @@ docker system prune -f --volumes
 
 This freed up approximately 42 GB of disk space. Afterward, developer was able to pull the image successfully, and the website began reflecting the latest changes.
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-Application Hang Issue: Node.js Container Not Restarting
+4. Application Hang Issue: Node.js Container Not Restarting
 Date: 24/10/2025
 
 Problem:
@@ -96,7 +116,7 @@ Additionally, we added a restart policy in the Docker Compose file to automatica
 
 In the Kubernetes environment, this change aligned perfectly with Kubernetes’ native restart mechanism. When the Node.js process exits, the Pod automatically restarts, ensuring continuous availability.
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SSH in WSL2
+3. SSH in WSL2
 Date: 27/10/25
 
 In wsl2, i was facing issue while ssh into ec2 with pem key.
@@ -109,7 +129,7 @@ cp /mnt/c/filelocation ~/.ssh/
 chmod 600 ~/.ssh/file.pem
 4) ssh -i ~/.ssh/file.pem ubuntu@<your-ec2-public-ip>
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
-Frontend Unreachable (502 Bad Gateway)
+2. Frontend Unreachable (502 Bad Gateway)
 Date: 29/10/2025
 
 Problem:
@@ -125,7 +145,7 @@ Verified which port the application was listening on inside the container:
 docker exec -it <container_id> bash -c "apt update -y && apt install -y net-tools lsof > /dev/null 2>&1 && (netstat -tulpn || lsof -i -P -n | grep LISTEN)"
 Identified the correct port (8080) and recreated the container with updated port mapping.
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
-For RAGPOC APP the server wasn't working as required. Latency issues, disk issues and memory issues and one time it os got affected.
+1. The server wasn't working as required. Latency issues, disk issues and memory issues and one time it os got affected.
 Date: 29/10/2025
 
 Problem:
