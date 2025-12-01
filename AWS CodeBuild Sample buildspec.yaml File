@@ -1,0 +1,66 @@
+version: 0.2 
+
+env: 
+variables: 
+AWS_DEFAULT_REGION: "<region>" 
+ACCOUNT_ID: "<account-id>" 
+IMAGE_REPO_NAME: "x-ui" 
+GITOPS_REPO: "Gitops-Repo" 
+GITOPS_FILE_PATH: "x/x-ui.yaml " 
+GITOPS_BRANCH: "main" 
+
+phases: 
+install: 
+commands: 
+- "echo '=== Installing prerequisites ==='" 
+- "apt-get update -y" 
+- "apt-get install -y git curl" 
+- "echo '=== Installing Trivy vulnerability scanner ==='" 
+- "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh" 
+- "cp ./bin/trivy /usr/local/bin/trivy" 
+
+pre_build: 
+commands: 
+- "echo '=== Logging into Amazon ECR ==='" 
+- "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com" 
+- "echo '=== Determining image tag ==='" 
+- "COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)" 
+- "IMAGE_TAG=${COMMIT_HASH:-latest}" 
+- "echo Using image tag: $IMAGE_TAG" 
+
+build: 
+commands: 
+- "echo '=== Installing Node.js dependencies ==='" 
+- "npm install --force" 
+- "echo '=== Running frontend build ==='" 
+- "npm run build --if-present" 
+- "echo '=== Building Docker image ==='" 
+- "docker build -t $IMAGE_REPO_NAME ." 
+- "docker tag $IMAGE_REPO_NAME:latest $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG" 
+- "echo '=== Scanning image for vulnerabilities ==='" 
+- "trivy image --exit-code 1 --severity CRITICAL $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG || (echo 'Critical vulnerabilities found. Failing build.')" 
+
+post_build: 
+commands: 
+- "echo '=== Pushing Docker image to ECR ==='" 
+- "docker push $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG" 
+
+- "echo '=== Cloning GitOps repository from CodeCommit ==='" 
+- "git config --global credential.helper '!aws codecommit credential-helper $@'" 
+- "git config --global credential.UseHttpPath true" 
+- "git clone --branch $GITOPS_BRANCH https://git-codecommit.$AWS_DEFAULT_REGION.amazonaws.com/v1/repos/$GITOPS_REPO" 
+- "cd $GITOPS_REPO" 
+
+- "echo '=== Updating image tag in $GITOPS_FILE_PATH ==='" 
+- "sed -i \"s|image:.*|image: $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG|\" $GITOPS_FILE_PATH" 
+
+- "echo '=== Committing and pushing changes to GitOps repo ==='" 
+- "git config user.email 'codebuild@aws.com'" 
+- "git config user.name 'CodeBuild'" 
+- "git add $GITOPS_FILE_PATH" 
+- "git commit -m 'Update $IMAGE_REPO_NAME image tag to $IMAGE_TAG' || echo 'No changes to commit'" 
+- "git push origin $GITOPS_BRANCH" 
+
+artifacts: 
+files: 
+- '**/*'
