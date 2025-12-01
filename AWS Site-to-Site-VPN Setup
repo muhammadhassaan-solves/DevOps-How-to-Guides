@@ -1,0 +1,64 @@
+1. Create the Customer Gateway
+
+Go to AWS Console → VPC → Customer Gateways → Create Customer Gateway.
+
+Fill in the fields:
+
+Field	What to Enter
+Name tag	X-CGW (optional, for easy identification)
+Routing	Dynamic (BGP)
+BGP ASN	Provided if provided (e.g., 65000)
+IP address	Customer’s public VPN IP (e.g., X.X.X.X)
+Device	Optional (e.g., Cisco ISR)
+Certificate ARN	Leave blank unless using certificate-based VPN
+
+Click Create Customer Gateway.
+
+
+2. Create a Virtual Private Gateway (VGW)
+
+Go to AWS Console → VPC → Virtual Private Gateways → Create Virtual Private Gateway.
+
+Give it a Name (e.g., X-VGW) and ASN (leave default).
+
+Click Create.
+
+Attach the VGW to your VPC:
+
+Go to Actions → Attach to VPC → Select your EKS VPC → Attach
+
+3. Create a Site-to-Site VPN Connection
+
+Go to AWS Console → VPC → Site-to-Site VPN Connections → Create VPN Connection.
+
+Fill in the fields:
+
+Field	What to Enter
+Name tag	X-to-xVPN
+Target Gateway	Virtual Private Gateway (VGW you just created)
+Customer Gateway	The one you created (MCB-CGW)
+Routing Options	Dynamic (BGP)
+
+Click Create VPN Connection.
+
+Download the VPN configuration (optional but helpful).
+
+4. Configure Route Tables
+
+Go to VPC → Route Tables → Select your EKS VPC route table
+
+Add a route for Customer’s network via the VGW
+
+Example:
+
+Destination	Target
+x.x.x.x/16	Virtual Private Gateway
+
+This ensures traffic from EKS to customer goes over the VPN.
+
+5. Verify the VPN
+
+Go to Site-to-Site VPN Connections → Status
+Make sure IPSec tunnels are Up
+
+Test connectivity from an EC2 instance in your VPC to Customer’s internal network
