@@ -1,0 +1,25 @@
+1. Create repo on AWS CodeCommit
+2. git clone <https link of codecommit repo>
+3. cd reponame
+4. git remote add github <github repo https link which is required to migrate>
+5. git fetch github
+6. enter your username and PAT
+7. for branch in $(git branch -r | grep 'github/' | sed 's|github/||'); do
+git checkout -b $branch github/$branch
+git push origin $branch
+done
+
+---------------------------------------------------------------------------------------
+Updating Code on Codecommit
+1. Clone GitHub repo locally
+git clone https://github.com/<username>/<repo>.git
+cd <repo>
+If you already have the repo locally, just cd into it.
+
+2. Add CodeCommit as a new remote
+git remote add codecommit https://git-codecommit.<region>.amazonaws.com/v1/repos/<repo-name>
+
+3. Push GitHub code to CodeCommit
+git checkout <branch-name>
+git push codecommit <branch-name> --force
+
