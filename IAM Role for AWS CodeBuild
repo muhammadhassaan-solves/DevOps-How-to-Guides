@@ -112,3 +112,8 @@ aws iam put-role-policy \
   --environment type=LINUX_CONTAINER,computeType=BUILD_GENERAL1_LARGE,image=aws/codebuild/standard:7.0,privilegedMode=true \
   --service-role arn:aws:iam::<account-id>:role/x-codebuild-role \
   --region <region>
+
+7. 
+ aws ecr create-repository \
+  --repository-name <app> \
+  --region <region>
