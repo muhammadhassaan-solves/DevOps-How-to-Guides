@@ -1,6 +1,25 @@
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+13. ClickJacking and Essential Http Headers
+Date: 09/12/25
+Since I was using ALB with AWS Load balancer controller in kubernetes cluster, I explored various methods 
+and at the end I found that there is an option in load balancer settings that allow to change attributes of the listener. 
+So, I simply turn on these reponse headers as follow:
+a. HTTP Strict Transport Security (HSTS) header value
+max-age=31536000; includeSubDomains; preload
+b. Content Security Policy (CSP) header value
+frame-ancestors 'self'
+c. X-Content-Type-Options header value
+nosniff
+d. X-Frame-Options header value
+SAMEORIGIN
+
+These response heaeders solved our ClickJacking and Essential Http Headers vulnerabilites of one of 
+our critical produciton based application raised by our VAPT Team. 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
 12. Pod Internal Connectivity got disturbed after I tried to make some changes in aws native cni for network policy
 Date: 26/11/25
-After hours of troubleshooting, I found that changing worker nodes  is the solution. So, I dissociated the worker nodes ec2 from Auto Scaler group one by one and the autoscaling group (asg) automatically launched new worker nodes and things started to work properly. 
+After hours of troubleshooting, I found that changing worker nodes  is the solution. So, I dissociated the worker nodes ec2 from Auto Scaler group one by one and 
+the autoscaling group (asg) automatically launched new worker nodes and things started to work properly. 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 11. I was facing 403 error after kubernetes deployment
 Date: 24/11/2025
