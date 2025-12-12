@@ -1,0 +1,5 @@
+1. Install  Docker Scout
+  curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
+2. docker scout version
+3. docker scout quickview public.ecr.aws/nginx/nginx:1.29.3-alpine3.22 (quickscan)
+4. docker scout cves public.ecr.aws/nginx/nginx:1.29.3-alpine3.22 
