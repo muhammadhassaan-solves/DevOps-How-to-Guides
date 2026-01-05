@@ -1,0 +1,121 @@
+1. Use the following docker compose.yml file (Assuming TLS Terminate at ALB level)
+
+services:
+  mariadb:
+    image: docker.io/bitnami/mariadb:latest
+    environment:
+      - MARIADB_ROOT_PASSWORD=RootPass_ChangeMe123!
+      - MARIADB_USER=wp_user
+      - MARIADB_PASSWORD=WpUserPass_ChangeMe123!
+      - MARIADB_DATABASE=wordpress_db
+    volumes:
+      - mariadb_data:/bitnami/mariadb
+    networks:
+      - wordpress-network
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/mariadb/healthcheck.sh"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    ports:
+      - "3306:3306"
+
+  wordpress:
+    image: bitnami/wordpress:latest
+    environment:
+      - WORDPRESS_DATABASE_USER=wp_user
+      - WORDPRESS_DATABASE_PASSWORD=WpUserPass_ChangeMe123!
+      - WORDPRESS_DATABASE_NAME=wordpress_db
+      - WORDPRESS_DB_HOST=mariadb:3306
+      - WORDPRESS_SCHEME=https
+      - WORDPRESS_HOST=abc.me
+      - WORDPRESS_ENABLE_HTTPS=yes
+    ports:
+      - "8080:8080"
+      - "443:8443"
+    volumes:
+      - wordpress_data:/bitnami/wordpress
+    networks:
+      - wordpress-network
+    depends_on:
+      - mariadb
+    restart: always
+
+networks:
+  wordpress-network:
+    driver: bridge
+
+volumes:
+  mariadb_data:
+    driver: local
+  wordpress_data:
+    driver: local
+
+2. Nginx Configuration File
+
+server {
+    listen 80;
+    server_name abc.me;
+
+    # --- Security Headers ---
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    # add_header Content-Security-Policy "frame-ancestors 'self'; default-src 'self'; script-src 'self'; object-src 'none';" always;
+    # add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+    # --- Hide server info ---
+    server_tokens off;
+
+    # --- Main proxy to WordPress/API backend ---
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # --- Block XML-RPC to prevent SSRF ---
+    location = /xmlrpc.php {
+        deny all;
+        return 403;
+    }
+
+    # --- Protect wp-cron.php from DoS ---
+    location = /wp-cron.php {
+        allow 127.0.0.1;   # Only allow local cron
+        deny all;          # Block external requests
+    }
+
+    # --- Block wp-login.php ---
+    #location = /wp-login.php {
+    #    deny all;
+    #    return 403;
+    #}
+
+    # --- Basic path traversal protection ---
+    if ($request_uri ~* "\.\./") {
+        return 403;
+    }
+
+    # --- Serve uploaded files safely ---
+    location /uploads/ {
+        root /var/www/html;   # Update based on your actual path
+        add_header Content-Disposition "attachment";
+        types { }             # Disable MIME type interpretation
+    }
+}
+
+3. Make changes into wp-config.php 
+a. Copying wp-config.php out of the container
+docker cp $(docker ps -qf "name=wordpress"):/bitnami/wordpress/wp-config.php ./wp-config.php
+
+add the following at the top of wp-config.php
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https') { $_SERVER['HTTPS'] = 'on'; }
+
+b. Editing and copying wp-config.php back
+sudo docker cp ./wp-config.php $(docker ps -qf "name=wordpress"):/bitnami/wordpress/wp-config.php
+docker restart $(docker ps -qf "name=wordpress")
