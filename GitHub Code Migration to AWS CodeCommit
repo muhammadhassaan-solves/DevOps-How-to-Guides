@@ -22,3 +22,9 @@ git remote add codecommit https://git-codecommit.<region>.amazonaws.com/v1/repos
 git checkout <branch-name>
 git push codecommit <branch-name> --force
 
+---------------------------------------------------------------------------------------------
+Git Revert
+git checkout <branch-name>
+git reset --hard <commit sha where we want to be>
+git push origin <branch-name> --force
+---------------------------------------------------------------------------------------------
