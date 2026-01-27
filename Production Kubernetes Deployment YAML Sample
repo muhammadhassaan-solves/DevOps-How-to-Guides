@@ -32,7 +32,7 @@ spec:
           image: dockerhub-username/x-backend:aa8ce39c5578903b2f01d8214ccd3d6d5ae0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 3000
+            - containerPort: 4000
           resources:
             requests:
               cpu: "150m"
@@ -74,5 +74,5 @@ spec:
   selector:
     app: x-backend
   ports:
-    - port: 3000
-      targetPort: 3000
+    - port: 4000
+      targetPort: 4000
