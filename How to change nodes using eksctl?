@@ -1,0 +1,14 @@
+eksctl create nodegroup \
+  --cluster <cluster-name> \
+  --region <region> \
+  --name private-ng \
+  --node-type t3.medium \
+  --nodes 2 \
+  --nodes-min 2 \
+  --nodes-max 4 \
+  --node-private-networking \
+  --subnet-ids <private-subnet-id-1>,<private-subnet-id-2>
+
+2.
+kubectl drain ip-x-x-x-x.me-central-1.compute.internal --ignore-daemonsets --delete-emptydir-data
+kubectl drain ip-x-x-x-x.me-central-1.compute.internal --ignore-daemonsets --delete-emptydir-data
