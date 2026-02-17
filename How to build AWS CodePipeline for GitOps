@@ -1,0 +1,282 @@
+1. Define Github as Identity Provider
+- Provider type, select OpenID Connect
+- Provider URL: https://token.actions.githubusercontent.com
+
+
+2. IAM Policy 
+
+policy_name: github_access_org
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "codecommit:GitPush",
+                "codecommit:GitPull"
+            ],
+            "Resource": [
+                "arn:aws:codecommit:us-east-1:<account-id>:<code-commit-repo-name>",
+                "arn:aws:codecommit:us-east-1:<account-id>:<code-commit-repo-name>",
+                "arn:aws:codecommit:us-east-1:<account-id>:<code-commit-repo-name>",
+                "arn:aws:codecommit:us-east-1:<account-id>:<code-commit-repo-name>"
+            ]
+        }
+    ]
+}
+
+3. Create Role
+role_name: github_org
+
+Attach above policy and following in trust relationship.
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+                },
+                "StringLike": {
+                    "token.actions.githubusercontent.com:sub": [
+                        "repo:org-name-github/repo-name:ref:refs/heads/branch-name",
+                        "repo:org-name-github/repo-name:ref:refs/heads/branch-name",
+                        "repo:org-name-github/repo-name:ref:refs/heads/branch-name",
+                        "repo:org-name-github/repo-name:ref:refs/heads/branch-name",
+                        "repo:org-name-github/repo-name:ref:refs/heads/branch-name"
+                    ]
+                }
+            }
+        }
+    ]
+}
+
+4. Github to CodeCommit
+
+codecommit_push.yml
+name: Production - Code push to AWS CodeCommit (x.tech)
+
+on:
+  push:
+    branches:
+      - production
+
+jobs:
+  push-to-codecommit:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::account_id:role/github_for_org
+          aws-region: us-east-1
+
+      - name: Test AWS role
+        run: aws sts get-caller-identity
+
+      - name: Configure Git for CodeCommit
+        run: |
+          git config --global credential.helper '!aws codecommit credential-helper $@'
+          git config --global credential.UseHttpPath true
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "action@github.com"
+
+      - name: Push branch to CodeCommit
+        run: |
+          CODECOMMIT_URL="https://git-codecommit.us-east-1.amazonaws.com/v1/repos/repo-name"
+
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+
+          echo "Current branch: $BRANCH_NAME"
+
+          git remote remove codecommit || true
+          git remote add codecommit $CODECOMMIT_URL
+          git fetch codecommit || true
+
+          git push codecommit $BRANCH_NAME:$BRANCH_NAME --force-with-lease
+
+5. Use this command to create a CodeBuild Project
+aws codebuild create-project \
+  --name x-ui \
+  --source type=CODECOMMIT,location=https://git-codecommit.<region>.amazonaws.com/v1/repos/<name>,gitCloneDepth=1 \
+  --source-version <branch> \
+  --artifacts type=NO_ARTIFACTS \
+  --environment type=LINUX_CONTAINER,computeType=BUILD_GENERAL1_LARGE,image=aws/codebuild/standard:7.0,privilegedMode=true \
+  --service-role arn:aws:iam::<account-id>:role/x-codebuild-role \
+  --region <region>
+
+6. Add  buildspec.yml in the respective repo
+
+(for node based backend)
+version: 0.2
+
+env:
+  variables:
+    AWS_DEFAULT_REGION: "<region-name>"
+    ACCOUNT_ID: "<account-id>"
+    IMAGE_REPO_NAME: "x-api"
+    GITOPS_REPO: "Gitops-Repo"
+    GITOPS_FILE_PATH: "x/x-api.yaml"
+    GITOPS_BRANCH: "main"
+
+phases:
+  install:
+    commands:
+      - echo "=== Installing prerequisites ==="
+      - "apt-get update -y"
+      - "apt-get install -y git curl"
+      - echo "=== Installing Trivy vulnerability scanner ==="
+      - "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh"
+      - "cp ./bin/trivy /usr/local/bin/trivy"
+
+
+  pre_build:
+    commands:
+      - echo "=== Logging into Amazon ECR ==="
+      - "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+      - echo "=== Determining image tag ==="
+      - "COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)"
+      - "IMAGE_TAG=${COMMIT_HASH:-latest}"
+      - "echo Using image tag: $IMAGE_TAG"
+
+  build:
+    commands:
+      - echo "=== Building Docker image ==="
+      - "docker build -t $IMAGE_REPO_NAME ."
+      - "docker tag $IMAGE_REPO_NAME:latest $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG"
+      - echo "=== Scanning image for vulnerabilities ==="
+      - "trivy image --exit-code 1 --severity CRITICAL $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG || (echo '❌ Critical vulnerabilities found. Failing build.')"
+
+  post_build:
+    commands:
+      - echo "=== Pushing Docker image to ECR ==="
+      - "docker push $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG"
+
+      - echo "=== Cloning GitOps repository from CodeCommit ==="
+      - "git config --global credential.helper '!aws codecommit credential-helper $@'"
+      - "git config --global credential.UseHttpPath true"
+      - "git clone --branch $GITOPS_BRANCH https://git-codecommit.$AWS_DEFAULT_REGION.amazonaws.com/v1/repos/$GITOPS_REPO"
+      - "cd $GITOPS_REPO"
+
+      - echo "=== Updating image tag in $GITOPS_FILE_PATH ==="
+      - "sed -i \"s|image:.*|image: $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG|\" $GITOPS_FILE_PATH"
+
+      - echo "=== Committing and pushing changes to GitOps repo ==="
+      - "git config user.email 'codebuild@aws.com'"
+      - "git config user.name 'CodeBuild'"
+      - "git add $GITOPS_FILE_PATH"
+      - "git commit -m 'Update $IMAGE_REPO_NAME image tag to $IMAGE_TAG' || echo 'No changes to commit'"
+      - "git push origin $GITOPS_BRANCH"
+
+artifacts:
+  files:
+    - '**/*'
+
+(for react based frontend)
+version: 0.2
+
+env:
+  variables:
+    AWS_DEFAULT_REGION: "<region-name>"
+    ACCOUNT_ID: "<account-id>"
+    IMAGE_REPO_NAME: "x-ui"
+    GITOPS_REPO: "Gitops-Repo"
+    GITOPS_FILE_PATH: "x/x-ui.yaml"
+    GITOPS_BRANCH: "main"
+
+phases:
+  install:
+    commands:
+      - "echo '=== Installing prerequisites ==='"
+      - "apt-get update -y"
+      - "apt-get install -y git curl"
+      - "echo '=== Installing Trivy vulnerability scanner ==='"
+      - "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh"
+      - "cp ./bin/trivy /usr/local/bin/trivy"
+
+  pre_build:
+    commands:
+      - "echo '=== Logging into Amazon ECR ==='"
+      - "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+      - "echo '=== Determining image tag ==='"
+      - "COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)"
+      - "IMAGE_TAG=${COMMIT_HASH:-latest}"
+      - "echo Using image tag: $IMAGE_TAG"
+
+  build:
+    commands:
+      - "echo '=== Installing Node.js dependencies ==='"
+      - "npm install --force"
+      - "echo '=== Running frontend build ==='"
+      - "npm run build --if-present"
+      - "echo '=== Building Docker image ==='"
+      - "docker build -t $IMAGE_REPO_NAME ."
+      - "docker tag $IMAGE_REPO_NAME:latest $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG"
+      - "echo '=== Scanning image for vulnerabilities ==='"
+      - "trivy image --exit-code 1 --severity CRITICAL $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG || (echo '❌ Critical vulnerabilities found. Failing build.')"
+
+  post_build:
+    commands:
+      - "echo '=== Pushing Docker image to ECR ==='"
+      - "docker push $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG"
+
+      - "echo '=== Cloning GitOps repository from CodeCommit ==='"
+      - "git config --global credential.helper '!aws codecommit credential-helper $@'"
+      - "git config --global credential.UseHttpPath true"
+      - "git clone --branch $GITOPS_BRANCH https://git-codecommit.$AWS_DEFAULT_REGION.amazonaws.com/v1/repos/$GITOPS_REPO"
+      - "cd $GITOPS_REPO"
+
+      - "echo '=== Updating image tag in $GITOPS_FILE_PATH ==='"
+      - "sed -i \"s|image:.*|image: $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG|\" $GITOPS_FILE_PATH"
+
+      - "echo '=== Committing and pushing changes to GitOps repo ==='"
+      - "git config user.email 'codebuild@aws.com'"
+      - "git config user.name 'CodeBuild'"
+      - "git add $GITOPS_FILE_PATH"
+      - "git commit -m 'Update $IMAGE_REPO_NAME image tag to $IMAGE_TAG' || echo 'No changes to commit'"
+      - "git push origin $GITOPS_BRANCH"
+
+artifacts:
+  files:
+    - '**/*'
+
+make sure each branch is respective branch is selected in codebuild for building the image.
+
+7. Define AWS ECR
+ aws ecr create-repository \
+  --repository-name <app> \
+  --region <region>
+
+8. For Respective IAM Policies
+Visit this guide: https://github.com/muhammadhassaan-solves/DevOps-How-to-Guides/blob/main/IAM%20Role%20for%20AWS%20CodeBuild
+
+9. Define AWS CodePipeline
+a. Click Creare
+b. Select Custom Pipeline in Category
+c. Choose pipeline settings
+- Execution mode: Superseded
+- Service role: New service role
+- tick Allow AWS CodePipeline to create a service role so it can be used with this new pipeline
+d. Add source stage
+- Source provider: AWS CodeCommit
+- tickCreate EventBridge rule to automatically detect source changes
+e. Add build stage
+Other build providers: AWS CodeBuild
+f. skip all other steps
+
