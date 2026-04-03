@@ -1,3 +1,29 @@
+For backend Applications
+
+1. ssh to the server
+ssh -i sample.pem username@hostname
+
+2. Install Nginx (Optional) 
+sudo apt update
+sudo apt install nginx
+
+3. Go to nginx conf directory 
+cd /etc/nginx/sites-available
+
+4. add required nginx conf
+nano filename
+
+ctrl+o
+ctrl+x
+
+5. validate nginx conf 
+sudo nginx -t
+
+6. sudo systemctl reload nginx
+
+
+For Frontend Applications
+
 1. Assumption
 Assuming you have 2 containers running. 
 one is serving ui and other is serving api. 
@@ -32,7 +58,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $remote_addr;
     }
-
+}
 5. Enable site
 sudo ln -s /etc/nginx/sites-available/x.tech \
            /etc/nginx/sites-enabled/
@@ -41,5 +67,6 @@ sudo ln -s /etc/nginx/sites-available/x.tech \
 sudo nginx -t
 sudo systemctl reload nginx
 
-7. SSL Certificate 
+
+7. SSL Certificate After Domain Mapping 
 sudo certbot --nginx -d x.tech
