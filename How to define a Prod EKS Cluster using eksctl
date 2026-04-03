@@ -1,22 +1,25 @@
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 metadata:
-  name: x-Production
-  region: <region>
-  version: "1.33"
+  name: staging-x
+  region: us-east-1
+  version: "1.35"
 vpc:
-  cidr: 14.0.0.0/16
+  cidr: 11.0.0.0/16
   nat:
-    gateway: HighlyAvailable
+    gateway: Single or HighlyAvailable
   clusterEndpoints:
     publicAccess: true
     privateAccess: true
-availabilityZones: ["", "", ""]
+availabilityZones: ["us-east-1a", "us-east-1b", "us-east-1c"]
 managedNodeGroups:
-  - name: x-Production-NG-1
-    desiredCapacity: 3
-    minSize: 3
-    maxSize: 3
+  - name: staging-x-nodes
     privateNetworking: true
-    instanceTypes: ["m7i.xlarge"]
-    amiFamily: AmazonLinux2
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 2
+    instanceTypes: ["m5.large"]
+    amiFamily: AmazonLinux2023
+    labels: { role: worker }
+    tags:
+      Name: staging-x-ng-1
