@@ -1,0 +1,74 @@
+1. Use GitHub as Identity Provider
+Go to IAM and Identity Providers
+Select OpenID Connect as Provider 
+add this provider url:token.actions.githubusercontent.com 
+set audience as sts.amazonaws.com 
+
+2. Use the following Policy
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:GetAuthorizationToken"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:CompleteLayerUpload",
+                "ecr:BatchGetImage",
+                "ecr:UploadLayerPart",
+                "ecr:InitiateLayerUpload",
+                "ecr:PutImage"
+            ],
+            "Resource": [
+                "arn:aws:ecr:us-east-2:<account-id>:repository/pey-admin-ui",
+                "arn:aws:ecr:us-east-2:<account-id>:repository/pey-sme-ui",
+                "arn:aws:ecr:us-east-2:<account-id>:repository/pey-cred-ui",
+                "arn:aws:ecr:us-east-2:<account-id>:repository/pey-invoice",
+                "arn:aws:ecr:us-east-2:<account-id>:repository/pey-api"
+            ]
+        }
+    ]
+}
+
+3. Go to IAM Roles
+Select Web identity as Trusted entity type
+Select the newly created Idp in Web identity
+add the following
+GitHub organization 
+Github organization
+GitHub repository 
+GitHub branch 
+add the following trust policy
+
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+				},
+				"StringLike": {
+					"token.actions.githubusercontent.com:sub": [
+						"repo:DamanInvestments/pey-admin-ui:ref:refs/heads/staging",
+						"repo:DamanInvestments/pey-sme-ui:ref:refs/heads/staging",
+						"repo:DamanInvestments/pey-cred-ui:ref:refs/heads/staging",
+						"repo:DamanInvestments/pey-invoice:ref:refs/heads/staging",
+						"repo:DamanInvestments/pey-api:ref:refs/heads/staging"
+					]
+				}
+			}
+		}
+	]
+}
