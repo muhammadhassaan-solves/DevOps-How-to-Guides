@@ -15,9 +15,15 @@ Give a descriptive name (e.g., PreResizeBackup-<date>)
 Wait for snapshot status to be completed
 
 3. Increase the volume size
-Go to EC2 → Volumes
-Select the volume → Actions → Modify Volume
-Enter new desired size → Confirm
+Go to:
+EC2 → Instances → Select your instance
+Click Storage tab
+Click Volume ID
+
+Then:
+Click Modify Volume
+Increase size (e.g. 150GB or 200GB)
+Click Modify
 
 4. Resize the partition on the instance
 sudo growpart /dev/xvda 1
